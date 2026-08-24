@@ -65,17 +65,27 @@ INTERACTIVE_OUTPUT_PATTERNS = (
     re.compile(r"(?i)\b(?:confirm|reply)\s+[\"']?(?:confirm|go\s+ahead|continue)\b"),
     re.compile(r"(?i)\bto\s+proceed\s+with\s+(?:generation|the\s+next\s+step)\b"),
     re.compile(r"(?i)\bawait(?:ing)?\s+(?:your\s+)?(?:confirmation|approval|reply)\b"),
-    re.compile(r"请(?:确认|回复|提供|上传|选择|回答|告知)"),
-    re.compile(r"(?:你|您)(?:是否|希望|想要)"),
-    re.compile(r"等待(?:你|您|用户)?(?:确认|回复)"),
-    re.compile(r"确认后(?:再|即可|将)"),
+    # Chinese-language fallbacks, kept as Unicode escapes so this source stays English:
+    # "please confirm/reply/provide/upload/choose/answer/inform".
+    re.compile(r"\u8bf7(?:\u786e\u8ba4|\u56de\u590d|\u63d0\u4f9b|\u4e0a\u4f20|\u9009\u62e9|\u56de\u7b54|\u544a\u77e5)"),
+    # "do you / would you like / do you want" (informal or formal "you").
+    re.compile(r"(?:\u4f60|\u60a8)(?:\u662f\u5426|\u5e0c\u671b|\u60f3\u8981)"),
+    # "awaiting your/the user's confirmation or reply".
+    re.compile(r"\u7b49\u5f85(?:\u4f60|\u60a8|\u7528\u6237)?(?:\u786e\u8ba4|\u56de\u590d)"),
+    # "after confirmation, then/can/will ...".
+    re.compile(r"\u786e\u8ba4\u540e(?:\u518d|\u5373\u53ef|\u5c06)"),
 )
 SILENCE_REQUEST_PATTERNS = (
     re.compile(
         r"(?i)\b(?:completely silent|complete silence|silent video|muted video|"
         r"no audio|no sound at all|without any (?:audio|sound))\b"
     ),
-    re.compile(r"(?:完全静音|全程静音|静音视频|视频静音|无声视频|不要任何声音|不需要任何声音)"),
+    # Chinese fallbacks for "silent/muted video" and "no audio/sound".
+    re.compile(
+        r"(?:\u5b8c\u5168\u9759\u97f3|\u5168\u7a0b\u9759\u97f3|\u9759\u97f3\u89c6\u9891|"
+        r"\u89c6\u9891\u9759\u97f3|\u65e0\u58f0\u89c6\u9891|\u4e0d\u8981\u4efb\u4f55\u58f0\u97f3|"
+        r"\u4e0d\u9700\u8981\u4efb\u4f55\u58f0\u97f3)"
+    ),
 )
 
 
