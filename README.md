@@ -1,184 +1,223 @@
 # ComfyUI Qwen H3 Prompt
 
-在 ComfyUI 内使用本地 Qwen3.8-27B 和 MiniMax-H3 官方 Skill 生成 H3 提示词与制作方案。    
-节点在 ComfyUI 内启动独立的本地 `llama-server`，推理过程不访问网络。运行完成后结束外部进程，释放GPU显存和系统内存（`force unload model`开启时），不占用ComfyUI内部资源。
+Generate MiniMax H3 prompts and production plans inside ComfyUI with a local Qwen3.8-27B model and the official MiniMax H3 Skills.
 
-## 官方 Skill 的本地适配边界
+The node starts an isolated local `llama-server` process from inside ComfyUI. Inference does not access the network. When `force unload model` is enabled, the process is stopped after execution so its GPU VRAM and system memory are released without occupying ComfyUI's internal model resources.
 
-`h3-prompt-writing` 官方声明可直接移植。其余 Skill 原本依赖 MiniMax Hub 的画布、选择卡和媒体生成工具。本节点保留官方 Skill 内容作为创意与领域指导，但统一跳过素材收集、选择卡、审批门槛和媒体生成步骤，只输出符合当前输入模式与时长的最终 H3 prompt。
+## Local adaptation boundaries of the official Skills
 
-与 MiniMax H3 官方 Skills 不同，本节点所使用的 Qwen3.8-27B GGUF 模型不具备分析声音的能力，不能准确提取已有音乐的旋律、BPM、歌词、音色或节拍点。有关声音的提示词只是“创作声音的描述”，不是分析或复刻参考音频。
+The official `h3-prompt-writing` Skill explicitly supports direct portability. The other Skills originally depend on MiniMax Hub features such as canvases, selection cards, and media-generation tools. This node preserves their official creative and domain guidance, but skips asset collection, selection cards, approval gates, and media-generation steps. It produces only the final H3 prompt for the selected input mode and duration.
 
-节点不会输出澄清问题、确认请求、备选方案、pre-production package 或下一步建议。用户未提供的可选内容会直接省略，例如画面文案、口号、品牌声明、对白、旁白和歌词；生成视频不可缺少但未指定的纯创意细节，则根据请求与参考媒体采用一个保守的确定值。
+Unlike the official MiniMax H3 Skills, the Qwen3.8-27B GGUF model used by this node cannot analyze audio. It cannot accurately extract a reference track's melody, BPM, lyrics, timbre, or beat positions. Audio-related prompt text is a newly created sound description, not an analysis or reproduction of reference audio.
 
-## 安装节点
-使用ComfyUI Manager安装， 或使用以下命令手动安装:
-```commandline
+The node does not output clarification questions, confirmation requests, alternatives, pre-production packages, or suggested next steps. Optional content that the user did not supply is omitted, including on-screen text, slogans, brand claims, dialogue, voice-over, and lyrics. Essential creative details that were not specified are filled with one conservative, deterministic choice based on the request and reference media.
+
+## Install the node
+
+Install it with ComfyUI Manager or clone it manually:
+
+```bash
 cd ComfyUI/custom_nodes/
-git clone https://github.com/chflame163/ComfyUI_Qwen_H3_Prompt.git
+git clone https://github.com/jalberty2018/ComfyUI_Qwen_H3_Prompt.git
 ```
 
-## 模型目录
-把 Qwen3.8 视觉模型和GGUF权重文件放到```ComfyUI/models/LLM/Qwen3.8/```目录。
-* 视觉权重：
-  从 https://huggingface.co/unsloth/Qwen3.8-27B-GGUF 下载 ```mmproj-F16.gguf```
-* GGUF权重：   
-  对于20G以上显存的设备，推荐从 https://huggingface.co/unsloth/Qwen3.8-27B-GGUF 下载 ```Qwen3.8-27B-Q4_K_M.gguf```。    
-  对于16G显存的设备，推荐 https://huggingface.co/soyaakinohara/qwen3.8-27b-abliterated-3.69bpw-12GB-MTP.gguf 。    
-  也可以自行下载其他与llama-server兼容的Qwen3.8权重。
+## Model directory
 
-## 安装llama-server runtime
+Place the Qwen3.8 vision projector and GGUF model in `ComfyUI/models/LLM/Qwen3.8/`.
 
-项目只提供一个跨平台安装入口 `install_runtime.py`。它仅使用 Python 标准库，自动识别 Windows、Linux 或 macOS、x64/ARM64 架构及显卡，并为当前机器部署固定的 llama.cpp `b10436` runtime，不需要安装额外的 pip 包。
+- Vision projector: download `mmproj-F16.gguf` from [unsloth/Qwen3.8-27B-GGUF](https://huggingface.co/unsloth/Qwen3.8-27B-GGUF).
+- GGUF model:
+  - For GPUs with more than 20 GB VRAM, `Qwen3.8-27B-Q4_K_M.gguf` from [unsloth/Qwen3.8-27B-GGUF](https://huggingface.co/unsloth/Qwen3.8-27B-GGUF) is recommended.
+  - For GPUs with 16 GB VRAM, [soyaakinohara/qwen3.8-27b-abliterated-3.69bpw-12GB-MTP.gguf](https://huggingface.co/soyaakinohara/qwen3.8-27b-abliterated-3.69bpw-12GB-MTP.gguf) is recommended.
+  - Other Qwen3.8 weights compatible with `llama-server` may also be used.
 
-Windows ComfyUI 官方便携包在节点目录中执行：
+## Use a preinstalled llama-server
 
+Managed containers can provide a native `llama-server` executable through the `MINIMAX_H3_LLAMA_SERVER` environment variable:
+
+```bash
+export MINIMAX_H3_LLAMA_SERVER=/opt/llama.cpp/bin/llama-server
 ```
-cd ComfyUI\custom_nodes\ComfyUI_QWen_H3_Prompt
+
+When this variable is set, the node uses that executable instead of requiring a runtime inside the custom-node directory. The executable is shared, but the node still starts its own authenticated `llama-server` child process on a free `127.0.0.1` port. It does not connect to or replace an already-running HTTP service.
+
+The `comfyui-runtime2` and `run-comfyui-minimax` images configure this path automatically. Do not run `install_runtime.py` inside those containers.
+
+## Install the bundled llama-server runtime
+
+For installations that do not provide `MINIMAX_H3_LLAMA_SERVER`, the project has one cross-platform installer: `install_runtime.py`. It uses only the Python standard library, detects Windows, Linux, or macOS plus the CPU architecture and GPU, and installs a pinned llama.cpp `b10436` runtime. No additional pip packages are required.
+
+For the official portable ComfyUI package on Windows, run this from the node directory:
+
+```bat
+cd ComfyUI\custom_nodes\ComfyUI_Qwen_H3_Prompt
 ..\..\..\python_embeded\python.exe install_runtime.py
 ```
 
-Linux 与 macOS 使用Python执行：
+On Linux and macOS, run:
 
-```
+```bash
 python install_runtime.py
 ```
 
-首次启动前必须先执行安装器。安装器会依次完成硬件检测、后端选择、下载、SHA256 校验、安全解压、`llama-server --version` 与 `--list-devices` 验证，最后生成本机专用的 `runtime_config.json`。下载缓存、源码缓存和安装结果都保存在节点的 `runtime/` 目录中。
+Run the installer before starting ComfyUI for the first time. It detects the hardware and selects a backend, downloads and verifies files with SHA-256, extracts them safely, checks `llama-server --version` and `--list-devices`, and finally writes a machine-specific `runtime_config.json`. The download cache, source cache, and installed runtime remain under the node's `runtime/` directory.
 
-安装器命令：
+Installer commands:
 
-```
-# 只显示检测结果和计划，不下载或安装
+```bash
+# Show the detected configuration and installation plan without changing files
 python install_runtime.py --dry-run
 
-# 查看当前系统和架构支持的后端
+# List the backends supported on the current system and architecture
 python install_runtime.py --list-backends
 
-# 手动指定后端
+# Select a backend manually
 python install_runtime.py --backend vulkan
 
-# 强制重新安装
+# Reinstall the runtime
 python install_runtime.py --force
 
-# 只使用 runtime/.downloads/b10436 中已经校验的文件
+# Use only previously verified files from runtime/.downloads/b10436
 python install_runtime.py --offline
 ```
 
+### Automatic backend selection
 
-### 自动后端选择
-
-| 系统和设备 | 自动顺序 |
+| System and device | Automatic preference order |
 | --- | --- |
 | Windows x64 NVIDIA | CUDA 12.4 → Vulkan → CPU |
 | Windows x64 AMD | ROCm 7.14 → Vulkan → CPU |
 | Windows x64 Intel | SYCL → Vulkan → CPU |
-| Windows x64 未识别 GPU | Vulkan → CPU |
+| Windows x64 with an unidentified GPU | Vulkan → CPU |
 | Windows ARM64 NVIDIA | CUDA 13.4 preview → CPU |
 | Windows ARM64 Qualcomm Adreno | OpenCL → CPU |
 | Linux x64 Intel | SYCL FP16 → Vulkan → CPU |
-| Linux x64 NVIDIA/AMD/未识别 GPU | Vulkan → CPU |
+| Linux x64 NVIDIA, AMD, or unidentified GPU | Vulkan → CPU |
 | Linux ARM64 | Vulkan → CPU |
-| macOS Apple Silicon 或 Intel | Metal → CPU |
+| macOS Apple Silicon or Intel | Metal → CPU |
 
-Windows 可用后端取决于架构，包括 `cuda12`、`cuda13`、`rocm`、`sycl`、`vulkan`、`opencl` 和 `cpu`。
+Available Windows backends depend on the architecture and can include `cuda12`, `cuda13`, `rocm`, `sycl`, `vulkan`, `opencl`, and `cpu`.
 
-Linux 官方预编译后端包括 `vulkan`、`sycl`、`sycl-fp32`、`openvino` 和 `cpu`，具体选项取决于架构。官方文件是 Ubuntu 构建，其他发行版需要兼容的 glibc/libstdc++。Vulkan、Intel SYCL/OpenVINO 还需要系统中已经存在相应的显卡驱动和运行库。
+Official prebuilt Linux backends include `vulkan`, `sycl`, `sycl-fp32`, `openvino`, and `cpu`, depending on the architecture. The official files target Ubuntu; other distributions need compatible glibc and libstdc++ versions. Vulkan and Intel SYCL/OpenVINO also require the appropriate system GPU drivers and runtime libraries.
 
-macOS 使用对应架构的官方包。Metal 不需要额外 GPU 计算框架，但 Qwen3.8-27B Q4 和视觉投影器仍需要足够的统一内存。
+macOS uses the official package for the active architecture. Metal does not require an additional GPU compute framework, but a Qwen3.8-27B Q4 model and vision projector still require sufficient unified memory.
 
-### Linux CUDA 源码部署
+### Linux CUDA source installation
 
-官方 `b10436` 没有提供 Linux CUDA 压缩包。NVIDIA Linux 用户可显式要求安装器从源码构建：
+The official `b10436` release does not provide a prebuilt Linux CUDA archive. NVIDIA Linux users can explicitly build it from source:
 
-```
+```bash
 python install_runtime.py --backend cuda --build-from-source
 ```
 
-源码构建不会调用 `sudo` 或自动修改系统。运行前必须已经具备：
+The source build does not call `sudo` or modify the system automatically. Before starting, make sure the system has:
 
-- 可正常运行 `nvidia-smi` 的 NVIDIA 驱动；
-- 包含 `nvcc` 的 NVIDIA CUDA Toolkit，`nvcc` 位于 `PATH` 中或已经设置 `CUDA_HOME`；
-- Git、CMake、C 编译器和 C++ 编译器，例如 Ubuntu/Debian 的 `git cmake build-essential`。
+- an NVIDIA driver for which `nvidia-smi` works;
+- an NVIDIA CUDA Toolkit containing `nvcc`, with `nvcc` on `PATH` or `CUDA_HOME` configured;
+- Git, CMake, a C compiler, and a C++ compiler, such as the Ubuntu/Debian `git cmake build-essential` packages.
 
+## Node
 
+Start ComfyUI and add `Qwen H3 Prompt (Local)` from the `😺dzNodes/Qwen_H3_Prompt` category.
 
-## 节点
-启动ComfyUI，在 `😺dzNodes/QWen_H3_Prompt` 分类中添加 `Qwen H3 Prompt (Local)`节点。
-![image](images/QwenH3Prompt_node.jpg)  
+![Qwen H3 Prompt node](images/QwenH3Prompt_node.jpg)
 
-节点选项说明：
-- `skill`：`auto` 或9个官方 Skill。设为auto时自动选择Skill路由。
-- `duration`：目标 H3 视频时长，默认 `10.0` 秒，取值范围4~15秒。
-- `think_mode`：布尔开关，默认关闭；自动在 Qwen 官方 instruct 和 thinking 推荐参数之间切换。
-- `reasoning_effort`：仅在 `think_mode` 开启时生效，默认 `medium`。
-- `seed`：种子。
-- `reference_images`：动态添加 0-9 张独立 IMAGE。每个插槽只接受一张图片；图片角色由数量和用户提示词共同决定。
-- `reference_videos`：动态添加 0-3 路 IMAGE 批次，内部固定按 24 fps 计算时长和采样时间。
-- `video_sample_frames_per_sec`：每路参考视频每秒抽取的帧数，默认值为 2。
-- `force unload model`：默认开启。开启时每次完成后终止内置 llama-server服务并强制清理内存和显存；关闭时保留模型供下一次运行复用。发生错误时无论选项状态都会强制释放。
+Node options:
 
-### 图片输入与模式路由
+- `skill`: select `auto`, one of the nine official Skills, or the local `h3-seamless-multishot-writing` Skill. `auto` asks Qwen to route to the appropriate Skill.
+- `prompt_profile`: `standard` preserves the official Skill behavior. `uncensored fidelity` preserves requested lawful fictional tone, intensity, profanity, horror, violence, and mature themes without unsolicited sanitizing, moralizing, or warnings. It does not add explicit elements that the user did not request.
+- `shot_count`: number of blocks generated by `h3-seamless-multishot-writing`, from 2 through 8. It is ignored by the other Skills.
+- `duration`: target H3 video duration; the default is `10.0` seconds. For the Multishot Skill this is the duration of every individual shot, must be 10.0–15.1 seconds, and produces a total runtime of `shot_count × duration`.
+- `think_mode`: disabled by default. It switches automatically between Qwen's official instruct and thinking sampling settings.
+- `reasoning_effort`: used only when `think_mode` is enabled; the default is `medium`.
+- `seed`: ComfyUI seed used for deterministic local inference.
+- `reference_images`: dynamically connect between zero and nine individual IMAGE values. Every slot must contain exactly one image; image roles are derived from the number of inputs and the user's prompt.
+- `reference_videos`: dynamically connect between zero and three IMAGE batches. Their durations and sampling timestamps are calculated at a fixed 24 fps.
+- `video_sample_frames_per_sec`: number of frames sampled from every second of each reference video; the default is `2`.
+- `force unload model`: enabled by default. When enabled, the node stops its `llama-server` process and releases memory and VRAM after every run. When disabled, the server remains available for reuse. Errors always force an unload.
 
-节点按照以下规则选择 H3 模式：
+### Image inputs and mode routing
 
-| 输入 | 判定方式 |
+The node selects an H3 mode with these rules:
+
+| Input | Routing behavior |
 | --- | --- |
-| 没有图片和视频 | 直接使用 T2VA |
-| 1 张图片、没有视频 | Qwen 根据用户提示词选择 I2VA、L2VA 或 Ref2VA |
-| 2 张图片、没有视频 | Qwen 根据用户提示词选择 FL2VA 或 Ref2VA |
-| 3-9 张图片 | 直接使用 Ref2VA |
-| 连接任意参考视频 | 直接使用 Ref2VA |
+| No images or videos | Use T2VA directly |
+| One image and no video | Qwen selects I2VA, L2VA, or Ref2VA from the request |
+| Two images and no video | Qwen selects FL2VA or Ref2VA from the request |
+| Three to nine images | Use Ref2VA directly |
+| Any connected reference video | Use Ref2VA directly |
 
-一到两张图片时，节点不会仅根据图片数量猜测首尾帧。要生成关键帧模式提示词，必须在用户提示词中明确说明图片的时间角色：
-
-```text
-# 一张首帧图，路由为 I2VA
-将 Picture 1 作为目标视频的首帧，从这个画面继续向前发展。
-
-# 一张尾帧图，路由为 L2VA
-将 Picture 1 作为目标视频最后一帧，设计一个自然抵达该画面的过程。
-
-# 两张首尾帧图，路由为 FL2VA
-Picture 1 是目标视频首帧，Picture 2 是目标视频尾帧，生成从前者连续过渡到后者的过程。
-```
-
-如果一到两张图片只是人物、产品、场景、构图或风格参考，也应明确说明其参考作用，节点会选择 Ref2VA：
+With one or two images, the node does not infer first- or last-frame roles from image count alone. To generate a keyframe-mode prompt, explicitly state each image's temporal role:
 
 ```text
-参考 Picture 1 的人物身份和服装，参考 Picture 2 的场景与灯光，创作一段产品宣传短片；两张图都不是首尾帧。
+# One first-frame image: route to I2VA
+Use Picture 1 as the first frame of the target video and continue forward from this scene.
+
+# One last-frame image: route to L2VA
+Use Picture 1 as the final frame of the target video and design a natural progression toward it.
+
+# First- and last-frame images: route to FL2VA
+Picture 1 is the first frame and Picture 2 is the final frame of the target video. Create a continuous transition between them.
 ```
 
-### 参考视频
+If one or two images are only references for identity, product, environment, composition, or visual style, state that explicitly so the node selects Ref2VA:
 
-`reference_videos` 最多连接 3 路，每一路都是按时间顺序排列的 IMAGE batch。单段视频按 24 fps 计算后必须为 2-15 秒，全部参考视频总时长不能超过 15 秒。
+```text
+Use Picture 1 as a reference for the character's identity and clothing, and Picture 2 as a reference for the environment and lighting. Create a product advertisement; neither image is a first or last frame.
+```
 
-`video_sample_frames_per_sec` 表示从每路视频的每一个一秒时间窗中均匀抽取多少帧，它不是整段视频的总抽帧数，也不会改变最终 H3 视频的帧率。
+### Seamless Multishot scripts
 
-默认值 `2` 适合大多数动作和运镜。静态产品展示可以使用 `1`；快速动作、复杂转场可提高到 `3-8`。数值越高，每秒保留的动作细节越多，但联系表中单帧面积会变小，同时增加图片编码、内存和推理开销。
+Select `h3-seamless-multishot-writing` to generate a script for
+[`ComfyUI-H3-Multishot`](https://github.com/jlucasmcrell/ComfyUI-H3-Multishot). The output contains one plain prose
+paragraph per shot with exactly one line containing only `---` between adjacent shots:
 
-连接参考视频后始终使用 Ref2VA。当前接口只接收视频画面帧，不会读取视频文件中的音轨。
+```text
+First shot paragraph.
+---
+Second shot paragraph.
+---
+Third shot paragraph.
+```
 
-### 原创声音与配乐描述
+The Skill repeats stable character identity, clothing, voice, environment, lighting, and camera-continuity sentences
+word-for-word. Every later shot opens with the preceding closing arrangement, holds it with subtle motion for roughly
+two seconds, performs one progressive physical action, and ends settled for the next handoff. The validator rejects
+JSON, Markdown, headings, H3 field labels, empty blocks, incorrect block counts, multiline blocks, and separators that
+are not exactly three hyphens on their own line.
 
-Qwen 会根据用户提示词、目标时长、参考图片以及参考视频的抽样画面，自动创作与画面匹配的声音设计：
+### Reference videos
 
-- 描述环境声、动作声、空间感和随画面变化的声音事件。
-- 描述原创器乐配乐的情绪、乐器、速度、发展、关键画面同步点和收束方式。
-- 没有用户明确提供时，不会自行编造对白、旁白、歌词或人声演唱。
-- 用户只要求“无背景音乐”时，输出 `non_diegetic_music: N/A`，但仍保留合理的环境声和动作声。
-- 用户明确要求“完全静音”“全程静音”或“不要任何声音”时，强制输出 `overall_soundscape: N/A` 和 `non_diegetic_music: N/A`。
+Connect at most three reference videos. Every video is an IMAGE batch in chronological frame order. At the fixed interpretation rate of 24 fps, each video must be between 2 and 15 seconds and their combined duration may not exceed 15 seconds.
 
-这属于根据视觉内容创作新的音频描述，不是分析、复刻或保留参考视频原声。生成的文本最终交给 MiniMax H3 合成原生声音。
+`video_sample_frames_per_sec` is the number of frames sampled from each one-second window, not the total number of frames sampled from the complete video. It does not change the target video's frame rate.
 
+The default value of `2` suits most actions and camera movements. Use `1` for mostly static product presentations. Increase it to `3` through `8` for fast action or complex transitions. Higher values preserve more motion detail per second, but reduce the area of individual frames in contact sheets and increase image encoding, memory, and inference costs.
 
-## 显存和生命周期
-若关闭 `force unload model`，内置服务会继续占用约 20 GB 显存，模型配置不变时下一次可直接复用；再次开启并运行节点、模型配置发生变化或退出 ComfyUI 时会终止驻留服务。
+Connecting a reference video always selects Ref2VA. The current interface receives only video frames and does not read the source video's audio track.
 
+### Original sound and music descriptions
 
-## 上游来源与许可证
+Qwen creates sound design that matches the user prompt, target duration, reference images, and sampled reference-video frames:
 
-- MiniMax H3 Skill 来自 [`MiniMax-AI/MiniMax-H3`](https://github.com/MiniMax-AI/MiniMax-H3) commit `d21241f0a4b3acbb34c97dae47fa417b7065e438`，官方文件保存在 `skills/`。
-- 跨平台runtime安装器固定使用 llama.cpp `b10436`，对应完整 commit `6fed9f6ff7a603b124cb8c5864fca6ea879f9f99`，并对下载文件执行 SHA256 校验。
-- Linux CUDA 源码构建使用同一固定 tag 和 commit。llama.cpp 的 MIT 许可证保存在 `third_party/llama.cpp-LICENSE`。
-- 本项目仅为学习研究使用，如果作为商业用途，请查阅相关原项目授权协议。
+- It describes environmental sound, action sounds, spatial qualities, and sound events that evolve with the visuals.
+- It describes the mood, instrumentation, tempo, development, synchronization points, and ending of original instrumental music.
+- It does not invent dialogue, narration, lyrics, or singing unless the user explicitly requests them.
+- If the user requests only “no background music,” the output uses `non_diegetic_music: N/A` while retaining appropriate environmental and action sounds.
+- If the user explicitly requests complete silence or no sound of any kind, the output forces both `overall_soundscape: N/A` and `non_diegetic_music: N/A`.
+
+This is newly created audio direction based on visual content. It is not analysis, reproduction, or preservation of a reference video's original sound.
+
+## VRAM and lifecycle
+
+When `force unload model` is disabled, the server continues to occupy approximately 20 GB of VRAM. A later run can reuse it as long as the model configuration has not changed. Enabling the option on a later run, changing the model configuration, encountering an error, or exiting ComfyUI stops the resident server.
+
+When using this node together with another local Qwen node, avoid keeping both servers resident unless the GPU has enough memory for both model instances.
+
+## Upstream sources and licenses
+
+- The MiniMax H3 Skills come from [`MiniMax-AI/MiniMax-H3`](https://github.com/MiniMax-AI/MiniMax-H3) commit `d21241f0a4b3acbb34c97dae47fa417b7065e438`; the official files are stored under `skills/`.
+- The cross-platform runtime installer pins llama.cpp `b10436`, corresponding to full commit `6fed9f6ff7a603b124cb8c5864fca6ea879f9f99`, and verifies downloaded files with SHA-256.
+- Linux CUDA source builds use the same pinned tag and commit. The llama.cpp MIT license is stored at `third_party/llama.cpp-LICENSE`.
+- This project is intended for study and research. Review the licenses of the respective upstream projects before commercial use.

@@ -17,6 +17,7 @@ from pathlib import Path
 NODE_ROOT = Path(__file__).resolve().parent
 RUNTIME_CONFIG_PATH = NODE_ROOT / "runtime_config.json"
 LLAMA_SEED_MODULUS = 0xFFFFFFFF
+EXTERNAL_LLAMA_SERVER_ENV = "MINIMAX_H3_LLAMA_SERVER"
 
 
 def normalize_llama_seed(seed: int) -> int:
@@ -72,6 +73,28 @@ def load_runtime_spec(
 ) -> RuntimeSpec:
     active_platform = normalize_runtime_platform(system_name)
     installer = _installer_name(active_platform)
+    external_executable = os.environ.get(EXTERNAL_LLAMA_SERVER_ENV, "").strip()
+    if external_executable:
+        executable = Path(external_executable).expanduser().resolve()
+        if not executable.is_file():
+            raise RuntimeError(
+                f"{EXTERNAL_LLAMA_SERVER_ENV} does not point to a llama-server file: "
+                f"{executable}"
+            )
+        if active_platform != "windows" and not os.access(executable, os.X_OK):
+            raise RuntimeError(
+                f"{EXTERNAL_LLAMA_SERVER_ENV} is not executable: {executable}"
+            )
+        return RuntimeSpec(
+            executable=executable,
+            library_dirs=(),
+            platform_name=active_platform,
+            backend=f"external ({EXTERNAL_LLAMA_SERVER_ENV})",
+            n_gpu_layers="auto",
+            fit=True,
+            fit_target_mib=1536,
+            flash_attention="auto",
+        )
     config_path = root / RUNTIME_CONFIG_PATH.name
     if config_path.is_file():
         try:
@@ -115,7 +138,8 @@ def load_runtime_spec(
 
     raise RuntimeError(
         f"llama.cpp runtime is not installed for {active_platform}. "
-        f"Run {installer} from the custom node directory before starting ComfyUI."
+        f"Set {EXTERNAL_LLAMA_SERVER_ENV} or run {installer} from the custom node "
+        "directory before starting ComfyUI."
     )
 
 
@@ -124,6 +148,8 @@ def build_runtime_environment(
     base_environment: dict[str, str] | None = None,
 ) -> dict[str, str]:
     environment = dict(os.environ if base_environment is None else base_environment)
+    if not runtime_spec.library_dirs:
+        return environment
     library_path = os.pathsep.join(str(path) for path in runtime_spec.library_dirs)
     environment["PATH"] = library_path + os.pathsep + environment.get("PATH", "")
     if runtime_spec.platform_name == "linux":
@@ -191,6 +217,11 @@ class LlamaServer:
 
     def start(self, timeout: float = 120.0) -> None:
         if not self.executable.is_file():
+            if self.runtime_spec.backend.startswith("external ("):
+                raise FileNotFoundError(
+                    f"External llama.cpp runtime is missing: {self.executable}. "
+                    f"Check {EXTERNAL_LLAMA_SERVER_ENV}."
+                )
             installer = _installer_name(self.runtime_spec.platform_name)
             raise FileNotFoundError(
                 f"llama.cpp runtime is missing: {self.executable}. "

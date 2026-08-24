@@ -20,10 +20,14 @@ from .media import (
 )
 from .runtime import LlamaServerManager
 from .skills import (
+    MULTISHOT_SKILL,
+    PROMPT_PROFILES,
+    PROMPT_PROFILE_STANDARD,
     SKILL_NAMES,
     detect_h3_mode,
     explicitly_requests_silence,
     mode_router_prompt,
+    multishot_output_issues,
     output_issues,
     parse_mode_selection,
     parse_skill_selection,
@@ -230,7 +234,7 @@ class QwenH3Prompt(io.ComfyNode):
             node_id="QwenH3PromptLocal",
             display_name="Qwen H3 Prompt (Local)",
             category="😺dzNodes/Qwen_H3_Prompt",
-            description="Runs a local llama.cpp server with Qwen3.8 and one of the nine official MiniMax H3 Skills.",
+            description="Runs a local llama.cpp server with Qwen3.8, nine official MiniMax H3 Skills, and a seamless multishot writer.",
             inputs=[
                 io.String.Input(
                     "prompt",
@@ -242,7 +246,7 @@ class QwenH3Prompt(io.ComfyNode):
                     "skill",
                     options=["auto", *SKILL_NAMES],
                     default="auto",
-                    tooltip="Auto routes the request, or choose one of the nine official MiniMax H3 Skills directly.",
+                    tooltip="Auto routes the request, or choose an official H3 Skill or the local seamless multishot writer directly.",
                 ),
                 io.Float.Input(
                     "duration",
@@ -308,6 +312,20 @@ class QwenH3Prompt(io.ComfyNode):
                     default=True,
                     tooltip="On stops the node's llama.cpp server and clears its VRAM and system memory after each run. Errors always force an unload.",
                 ),
+                io.Combo.Input(
+                    "prompt_profile",
+                    options=list(PROMPT_PROFILES),
+                    default=PROMPT_PROFILE_STANDARD,
+                    tooltip="Standard preserves the official behavior. Uncensored fidelity preserves requested lawful fictional tone and intensity without unsolicited sanitizing or warnings.",
+                ),
+                io.Int.Input(
+                    "shot_count",
+                    default=3,
+                    min=2,
+                    max=8,
+                    step=1,
+                    tooltip="Used by h3-seamless-multishot-writing. Duration is applied to each shot; total runtime is shot_count × duration.",
+                ),
                 io.Autogrow.Input(
                     "reference_images",
                     optional=True,
@@ -356,6 +374,8 @@ class QwenH3Prompt(io.ComfyNode):
         max_tokens,
         video_sample_frames_per_sec,
         force_unload_model,
+        prompt_profile,
+        shot_count,
         reference_images=None,
         reference_videos=None,
     ) -> io.NodeOutput:
@@ -364,8 +384,10 @@ class QwenH3Prompt(io.ComfyNode):
         messages = None
         repair_messages = None
         LOGGER.info(
-            "[Qwen H3] Node execution started | skill=%s | think_mode=%s | seed=%d | force_unload_model=%s",
+            "[Qwen H3] Node execution started | skill=%s | prompt_profile=%s | shot_count=%d | think_mode=%s | seed=%d | force_unload_model=%s",
             skill,
+            prompt_profile,
+            shot_count,
             think_mode,
             seed,
             force_unload_model,
@@ -509,11 +531,18 @@ class QwenH3Prompt(io.ComfyNode):
                         "[Qwen H3] Skill routing result | selected=%s (manual)",
                         selected,
                     )
+                is_multishot = selected == MULTISHOT_SKILL
 
                 messages = [
                     {
                         "role": "system",
-                        "content": system_prompt(selected, mode, duration),
+                        "content": system_prompt(
+                            selected,
+                            mode,
+                            duration,
+                            prompt_profile=prompt_profile,
+                            shot_count=shot_count,
+                        ),
                     },
                     {"role": "user", "content": content},
                 ]
@@ -538,13 +567,29 @@ class QwenH3Prompt(io.ComfyNode):
                     time.perf_counter() - stage_started,
                 )
 
-                LOGGER.info("[Qwen H3] Validating final H3 prompt")
-                issues = output_issues(
-                    result,
-                    mode,
-                    duration,
-                    require_complete_silence=complete_silence,
-                )
+                LOGGER.info("[Qwen H3] Validating final H3 output")
+                if is_multishot:
+                    issues = multishot_output_issues(result, shot_count)
+                    repair_instruction = (
+                        f"Repair the output. Return exactly {shot_count} non-empty H3 shot paragraphs only, "
+                        f"separated by exactly {shot_count - 1} lines containing only ---. Preserve the repeated "
+                        "shot structure and copy stable identity, clothing, voice, environment, lighting, and "
+                        "camera-continuity sentences word-for-word wherever they apply. Remove JSON, Markdown, "
+                        "headings, field labels, questions, workflow text, and all text outside the shot blocks. "
+                    )
+                else:
+                    issues = output_issues(
+                        result,
+                        mode,
+                        duration,
+                        require_complete_silence=complete_silence,
+                    )
+                    repair_instruction = (
+                        "Repair the output. Return exactly one complete final H3 video prompt only. "
+                        "Remove every preface, workflow description, question, clarification, confirmation, "
+                        "approval gate, option list, and next-step request. Omit unsupported optional elements "
+                        "instead of asking about them. "
+                    )
                 if issues:
                     LOGGER.warning(
                         "[Qwen H3] Detected %d output issue(s); starting automatic repair: %s",
@@ -557,12 +602,7 @@ class QwenH3Prompt(io.ComfyNode):
                         {"role": "assistant", "content": result},
                         {
                             "role": "user",
-                            "content": (
-                                "Repair the output. Return exactly one complete final H3 video prompt only. "
-                                "Remove every preface, workflow description, question, clarification, confirmation, "
-                                "approval gate, option list, and next-step request. Omit unsupported optional elements "
-                                "instead of asking about them. Problems: " + "; ".join(issues)
-                            ),
+                            "content": repair_instruction + "Problems: " + "; ".join(issues),
                         },
                     ]
                     result, repair_usage = server.chat(
@@ -578,18 +618,21 @@ class QwenH3Prompt(io.ComfyNode):
                         _usage_summary(repair_usage),
                         time.perf_counter() - stage_started,
                     )
-                    remaining = output_issues(
-                        result,
-                        mode,
-                        duration,
-                        require_complete_silence=complete_silence,
-                    )
+                    if is_multishot:
+                        remaining = multishot_output_issues(result, shot_count)
+                    else:
+                        remaining = output_issues(
+                            result,
+                            mode,
+                            duration,
+                            require_complete_silence=complete_silence,
+                        )
                     if remaining:
                         raise RuntimeError(
-                            "Qwen output still violates the final H3 prompt contract: "
+                            "Qwen output still violates the final H3 output contract: "
                             + "; ".join(remaining)
                         )
-                LOGGER.info("[Qwen H3] Final H3 prompt validation passed")
+                LOGGER.info("[Qwen H3] Final H3 output validation passed")
 
                 content = None
                 messages = None
