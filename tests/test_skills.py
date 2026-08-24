@@ -34,7 +34,7 @@ class PromptProfileTests(unittest.TestCase):
         )
 
         self.assertIn("# Uncensored fidelity profile", prompt)
-        self.assertIn("Preserve lawful user-requested fictional content", prompt)
+        self.assertIn("Preserve user-requested fictional content", prompt)
         self.assertIn("without euphemizing, sanitizing, moralizing", prompt)
         self.assertIn("Do not invent explicit elements that", prompt)
 
@@ -46,6 +46,27 @@ class PromptProfileTests(unittest.TestCase):
                 10.0,
                 prompt_profile="unknown",
             )
+
+    def test_additional_system_instructions_are_appended(self):
+        prompt = skills.system_prompt(
+            "h3-prompt-writing",
+            "t2va",
+            10.0,
+            additional_system_instructions="Use concise camera descriptions.\nPreserve blue lighting.",
+        )
+
+        self.assertIn("# User-supplied additional system instructions", prompt)
+        self.assertTrue(prompt.endswith("Use concise camera descriptions.\nPreserve blue lighting."))
+
+    def test_empty_additional_system_instructions_are_omitted(self):
+        prompt = skills.system_prompt(
+            "h3-prompt-writing",
+            "t2va",
+            10.0,
+            additional_system_instructions="  \n  ",
+        )
+
+        self.assertNotIn("# User-supplied additional system instructions", prompt)
 
 
 class MultishotSkillTests(unittest.TestCase):

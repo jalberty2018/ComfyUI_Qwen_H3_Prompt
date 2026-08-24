@@ -326,6 +326,13 @@ class QwenH3Prompt(io.ComfyNode):
                     step=1,
                     tooltip="Used by h3-seamless-multishot-writing. Duration is applied to each shot; total runtime is shot_count × duration.",
                 ),
+                io.String.Input(
+                    "additional_system_instructions",
+                    multiline=True,
+                    dynamic_prompts=True,
+                    default="",
+                    tooltip="Optional extra instructions appended to the system prompt. Required output format, reference facts, and duration constraints keep precedence.",
+                ),
                 io.Autogrow.Input(
                     "reference_images",
                     optional=True,
@@ -376,6 +383,7 @@ class QwenH3Prompt(io.ComfyNode):
         force_unload_model,
         prompt_profile,
         shot_count,
+        additional_system_instructions="",
         reference_images=None,
         reference_videos=None,
     ) -> io.NodeOutput:
@@ -542,6 +550,7 @@ class QwenH3Prompt(io.ComfyNode):
                             duration,
                             prompt_profile=prompt_profile,
                             shot_count=shot_count,
+                            additional_system_instructions=additional_system_instructions,
                         ),
                     },
                     {"role": "user", "content": content},
