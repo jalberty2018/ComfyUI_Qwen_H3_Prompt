@@ -30,6 +30,7 @@ from .skills import (
     explicitly_requests_silence,
     mode_router_prompt,
     multishot_output_issues,
+    normalize_model_output,
     output_issues,
     parse_mode_selection,
     parse_skill_selection,
@@ -79,7 +80,7 @@ def _release_node_resources() -> None:
 def _model_options(projector: bool) -> list[str]:
     options = gguf_options(MODEL_DIR, projector)
     fallback = DEFAULT_MMPROJ if projector else DEFAULT_MODEL
-    return options or [fallback]
+    return options or [Path(fallback).name]
 
 
 def _resolve_model(name: str) -> Path:
@@ -251,13 +252,21 @@ class QwenH3Prompt(io.ComfyNode):
                 io.Combo.Input(
                     "llm_model",
                     options=models,
-                    default=DEFAULT_MODEL if DEFAULT_MODEL in models else models[0],
+                    default=(
+                        Path(DEFAULT_MODEL).name
+                        if Path(DEFAULT_MODEL).name in models
+                        else models[0]
+                    ),
                     tooltip="GGUF language model found recursively under ComfyUI/models/LLM.",
                 ),
                 io.Combo.Input(
                     "vision_model",
                     options=projectors,
-                    default=DEFAULT_MMPROJ if DEFAULT_MMPROJ in projectors else projectors[0],
+                    default=(
+                        Path(DEFAULT_MMPROJ).name
+                        if Path(DEFAULT_MMPROJ).name in projectors
+                        else projectors[0]
+                    ),
                     tooltip="GGUF multimodal projector found recursively under ComfyUI/models/LLM.",
                 ),
                 io.Boolean.Input(
@@ -583,6 +592,12 @@ class QwenH3Prompt(io.ComfyNode):
                     time.perf_counter() - stage_started,
                 )
 
+                normalized_result = normalize_model_output(result)
+                if normalized_result != result:
+                    LOGGER.info(
+                        "[Qwen H3] Removed harmless surrounding whitespace or Markdown fence"
+                    )
+                result = normalized_result
                 LOGGER.info("[Qwen H3] Validating final H3 output")
                 if is_multishot:
                     issues = multishot_output_issues(result, shot_count)
@@ -634,6 +649,12 @@ class QwenH3Prompt(io.ComfyNode):
                         _usage_summary(repair_usage),
                         time.perf_counter() - stage_started,
                     )
+                    normalized_result = normalize_model_output(result)
+                    if normalized_result != result:
+                        LOGGER.info(
+                            "[Qwen H3] Removed harmless surrounding whitespace or Markdown fence from repaired output"
+                        )
+                    result = normalized_result
                     if is_multishot:
                         remaining = multishot_output_issues(result, shot_count)
                     else:

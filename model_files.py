@@ -24,14 +24,14 @@ def gguf_options(model_root: Path, projector: bool) -> list[str]:
     root = model_root.resolve()
     if not root.is_dir():
         return []
-    options = []
+    options = set()
     for path in root.rglob("*.gguf"):
         resolved = path.resolve()
         if not _is_usable_gguf(resolved, root):
             continue
         is_projector = "mmproj" in path.name.lower()
         if is_projector == projector:
-            options.append(resolved.relative_to(root).as_posix())
+            options.add(resolved.name)
     return sorted(options, key=str.casefold)
 
 

@@ -231,5 +231,27 @@ class MultishotSkillTests(unittest.TestCase):
         self.assertEqual(skills.multishot_output_issues(text, 2), [])
 
 
+class ModelOutputNormalizationTests(unittest.TestCase):
+    def test_unwraps_complete_markdown_fence(self):
+        text = "```plaintext\r\nsubject_definitions: ID_A is stable.\r\nsummary: Done.\r\n```"
+
+        normalized = skills.normalize_model_output(text)
+
+        self.assertEqual(
+            normalized,
+            "subject_definitions: ID_A is stable.\r\nsummary: Done.",
+        )
+
+    def test_unwraps_fence_without_language_and_removes_bom(self):
+        text = "\ufeff  ```\nBody only.\n```  "
+
+        self.assertEqual(skills.normalize_model_output(text), "Body only.")
+
+    def test_does_not_remove_non_enclosing_fence(self):
+        text = "Preface\n```text\nBody\n```"
+
+        self.assertEqual(skills.normalize_model_output(text), text)
+
+
 if __name__ == "__main__":
     unittest.main()

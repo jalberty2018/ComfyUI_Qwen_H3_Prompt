@@ -483,3 +483,16 @@ def output_issues(
             break
         previous = timestamp
     return issues
+
+
+def normalize_model_output(text: str) -> str:
+    """Remove harmless transport formatting without rewriting model content."""
+    stripped = text.lstrip("\ufeff").strip()
+    fenced = re.fullmatch(
+        r"```[^\r\n]*\r?\n(?P<body>.*?)\r?\n```",
+        stripped,
+        flags=re.DOTALL,
+    )
+    if fenced:
+        return fenced.group("body").strip()
+    return stripped

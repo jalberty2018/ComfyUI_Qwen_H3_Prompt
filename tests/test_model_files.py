@@ -81,11 +81,11 @@ class ModelFileResolutionTests(unittest.TestCase):
 
             self.assertEqual(
                 model_files.gguf_options(root, projector=False),
-                [f"{dolphin.name}/{model_name}"],
+                [model_name],
             )
             self.assertEqual(
                 model_files.gguf_options(root, projector=True),
-                [f"{dolphin.name}/{projector_name}"],
+                [projector_name],
             )
 
 
