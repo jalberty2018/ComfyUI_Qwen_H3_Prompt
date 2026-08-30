@@ -20,11 +20,12 @@ from .media import (
 )
 from .runtime import LlamaServerManager
 from .skills import (
+    H3_MODE_AUTO,
+    H3_MODE_OPTIONS,
     MULTISHOT_SKILL,
     PROMPT_PROFILES,
     PROMPT_PROFILE_STANDARD,
     SKILL_NAMES,
-    detect_h3_mode,
     explicitly_requests_silence,
     mode_router_prompt,
     multishot_output_issues,
@@ -32,6 +33,7 @@ from .skills import (
     parse_mode_selection,
     parse_skill_selection,
     router_prompt,
+    resolve_h3_mode,
     system_prompt,
 )
 
@@ -316,7 +318,7 @@ class QwenH3Prompt(io.ComfyNode):
                     "prompt_profile",
                     options=list(PROMPT_PROFILES),
                     default=PROMPT_PROFILE_STANDARD,
-                    tooltip="Standard preserves the official behavior. Uncensored fidelity preserves requested lawful fictional tone and intensity without unsolicited sanitizing or warnings.",
+                    tooltip="Standard preserves the official behavior. Choose the QWEN or Dolphin uncensored fidelity contract for the matching model family.",
                 ),
                 io.Int.Input(
                     "shot_count",
@@ -332,6 +334,13 @@ class QwenH3Prompt(io.ComfyNode):
                     dynamic_prompts=True,
                     default="",
                     tooltip="Optional extra instructions appended to the system prompt. Required output format, reference facts, and duration constraints keep precedence.",
+                ),
+                io.Combo.Input(
+                    "h3_model_mode",
+                    display_name="H3 model mode",
+                    options=list(H3_MODE_OPTIONS),
+                    default=H3_MODE_AUTO,
+                    tooltip="Auto keeps the existing media/prompt routing. T2VA, I2VA, and FL2VA use the base H3 prompt rules; REF2VA uses the reference prompt rules.",
                 ),
                 io.Autogrow.Input(
                     "reference_images",
@@ -384,6 +393,7 @@ class QwenH3Prompt(io.ComfyNode):
         prompt_profile,
         shot_count,
         additional_system_instructions="",
+        h3_model_mode=H3_MODE_AUTO,
         reference_images=None,
         reference_videos=None,
     ) -> io.NodeOutput:
@@ -392,8 +402,9 @@ class QwenH3Prompt(io.ComfyNode):
         messages = None
         repair_messages = None
         LOGGER.info(
-            "[Qwen H3] Node execution started | skill=%s | prompt_profile=%s | shot_count=%d | think_mode=%s | seed=%d | force_unload_model=%s",
+            "[Qwen H3] Node execution started | skill=%s | h3_model_mode=%s | prompt_profile=%s | shot_count=%d | think_mode=%s | seed=%d | force_unload_model=%s",
             skill,
+            h3_model_mode,
             prompt_profile,
             shot_count,
             think_mode,
@@ -413,7 +424,7 @@ class QwenH3Prompt(io.ComfyNode):
                 videos,
                 video_sample_frames_per_sec,
             )
-            mode = detect_h3_mode(len(images), len(videos))
+            mode = resolve_h3_mode(h3_model_mode, len(images), len(videos))
             complete_silence = explicitly_requests_silence(prompt)
             model = _resolve_model(llm_model)
             projector = _resolve_model(vision_model)
@@ -429,9 +440,10 @@ class QwenH3Prompt(io.ComfyNode):
                 settings["repetition_penalty"],
             )
             LOGGER.info(
-                "[Qwen H3] Multimodal input parsed | images=%d | videos=%d | initial_mode=%s | complete_silence=%s | elapsed %.2f s",
+                "[Qwen H3] Multimodal input parsed | images=%d | videos=%d | requested_mode=%s | initial_mode=%s | complete_silence=%s | elapsed %.2f s",
                 len(images),
                 len(videos),
+                h3_model_mode,
                 mode or "automatic",
                 complete_silence,
                 time.perf_counter() - stage_started,
@@ -489,9 +501,14 @@ class QwenH3Prompt(io.ComfyNode):
                         _usage_summary(mode_usage),
                         time.perf_counter() - stage_started,
                     )
-                else:
+                elif h3_model_mode == H3_MODE_AUTO:
                     LOGGER.info(
                         "[Qwen H3] H3 mode routing result | selected=%s (deterministic from media counts)",
+                        mode,
+                    )
+                else:
+                    LOGGER.info(
+                        "[Qwen H3] H3 mode routing result | selected=%s (forced by H3 model mode)",
                         mode,
                     )
 
