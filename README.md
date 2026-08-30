@@ -204,7 +204,7 @@ are not exactly three hyphens on their own line.
 
 ### Reference videos
 
-Connect at most three reference videos. Every video is an IMAGE batch in chronological frame order. At the fixed interpretation rate of 24 fps, each video must be between 2 and 15 seconds and their combined duration may not exceed 15 seconds.
+Connect at most three reference videos. Every video is an IMAGE batch in chronological frame order and must contain at least one frame. At the fixed interpretation rate of 24 fps, each video may be at most 15 seconds and their combined duration may not exceed 15 seconds.
 
 `video_sample_frames_per_sec` is the number of frames sampled from each one-second window, not the total number of frames sampled from the complete video. It does not change the target video's frame rate.
 

@@ -119,10 +119,15 @@ def _reference_video_details(
     total_duration = 0.0
     for video_index, frames in enumerate(videos, 1):
         frame_count = int(frames.shape[0])
-        source_duration = frame_count / REFERENCE_VIDEO_FPS
-        if not 2.0 <= source_duration <= 15.0:
+        if frame_count < 1:
             raise ValueError(
-                f"Reference video {video_index} must be 2-15 seconds at 24 fps; got {source_duration:.2f}s."
+                f"Reference video {video_index} must contain at least 1 frame; got {frame_count}."
+            )
+        source_duration = frame_count / REFERENCE_VIDEO_FPS
+        if source_duration > 15.0:
+            raise ValueError(
+                f"Reference video {video_index} must be at most 15 seconds at 24 fps; "
+                f"got {source_duration:.2f}s."
             )
         total_duration += source_duration
         details.append(
