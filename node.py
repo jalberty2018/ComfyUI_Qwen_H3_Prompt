@@ -12,6 +12,7 @@ import comfy.model_management
 import folder_paths
 from comfy_api.latest import ComfyExtension, io
 
+from .model_files import DEFAULT_MMPROJ, DEFAULT_MODEL, gguf_options, resolve_gguf
 from .media import (
     image_content,
     image_grid_content,
@@ -37,9 +38,7 @@ from .skills import (
     system_prompt,
 )
 
-MODEL_DIR = Path(folder_paths.models_dir) / "LLM" / "Qwen3.8"
-DEFAULT_MODEL = "Qwen3.8-27B-Q4_K_M.gguf"
-DEFAULT_MMPROJ = "mmproj-F16.gguf"
+MODEL_DIR = Path(folder_paths.models_dir) / "LLM"
 REFERENCE_VIDEO_FPS = 24.0
 INFERENCE_LOCK = threading.Lock()
 SERVER_MANAGER = LlamaServerManager()
@@ -78,22 +77,13 @@ def _release_node_resources() -> None:
 
 
 def _model_options(projector: bool) -> list[str]:
-    files = sorted(path.name for path in MODEL_DIR.glob("*.gguf")) if MODEL_DIR.is_dir() else []
-    if projector:
-        options = [name for name in files if "mmproj" in name.lower()]
-        fallback = DEFAULT_MMPROJ
-    else:
-        options = [name for name in files if "mmproj" not in name.lower()]
-        fallback = DEFAULT_MODEL
+    options = gguf_options(MODEL_DIR, projector)
+    fallback = DEFAULT_MMPROJ if projector else DEFAULT_MODEL
     return options or [fallback]
 
 
 def _resolve_model(name: str) -> Path:
-    root = MODEL_DIR.resolve()
-    path = (root / name).resolve()
-    if path.parent != root or not path.is_file() or path.suffix.lower() != ".gguf":
-        raise FileNotFoundError(f"Invalid or missing GGUF model in {root}: {name}")
-    return path
+    return resolve_gguf(MODEL_DIR, name, LOGGER)
 
 
 def _autogrow_values(inputs) -> list:
@@ -262,13 +252,13 @@ class QwenH3Prompt(io.ComfyNode):
                     "llm_model",
                     options=models,
                     default=DEFAULT_MODEL if DEFAULT_MODEL in models else models[0],
-                    tooltip="GGUF language model from ComfyUI/models/LLM/Qwen3.8.",
+                    tooltip="GGUF language model found recursively under ComfyUI/models/LLM.",
                 ),
                 io.Combo.Input(
                     "vision_model",
                     options=projectors,
                     default=DEFAULT_MMPROJ if DEFAULT_MMPROJ in projectors else projectors[0],
-                    tooltip="GGUF multimodal projector from ComfyUI/models/LLM/Qwen3.8.",
+                    tooltip="GGUF multimodal projector found recursively under ComfyUI/models/LLM.",
                 ),
                 io.Boolean.Input(
                     "think_mode",

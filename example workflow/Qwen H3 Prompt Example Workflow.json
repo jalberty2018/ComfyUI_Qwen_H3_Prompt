@@ -187,7 +187,7 @@
         "Create a product promotional video for the product shown in picture 1, using the character depicted in picture 2.",
         "auto",
         10,
-        "Qwen3.8-27B-Q4_K_M.gguf",
+        "qwen3.8-27b-uncensored-fp8-q4_k_m.gguf",
         "mmproj-F16.gguf",
         false,
         "medium",

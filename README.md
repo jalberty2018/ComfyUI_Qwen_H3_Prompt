@@ -23,13 +23,26 @@ git clone https://github.com/jalberty2018/ComfyUI_Qwen_H3_Prompt.git
 
 ## Model directory
 
-Place the Qwen3.8 vision projector and GGUF model in `ComfyUI/models/LLM/Qwen3.8/`.
+The node recursively discovers language models and vision projectors under `ComfyUI/models/LLM/`. Keep each model family in its own subdirectory; the UI displays paths relative to the `LLM` directory.
+
+For Qwen, place the vision projector and GGUF model in `ComfyUI/models/LLM/Qwen3.8/`.
 
 - Vision projector: download `mmproj-F16.gguf` from [unsloth/Qwen3.8-27B-GGUF](https://huggingface.co/unsloth/Qwen3.8-27B-GGUF).
 - GGUF model:
-  - For GPUs with more than 20 GB VRAM, `Qwen3.8-27B-Q4_K_M.gguf` from [unsloth/Qwen3.8-27B-GGUF](https://huggingface.co/unsloth/Qwen3.8-27B-GGUF) is recommended.
+  - The managed RunPod templates provision `qwen3.8-27b-uncensored-fp8-q4_k_m.gguf`, which is the node's default.
+  - For GPUs with more than 20 GB VRAM, `Qwen3.8-27B-Q4_K_M.gguf` from [unsloth/Qwen3.8-27B-GGUF](https://huggingface.co/unsloth/Qwen3.8-27B-GGUF) is also supported.
   - For GPUs with 16 GB VRAM, [soyaakinohara/qwen3.8-27b-abliterated-3.69bpw-12GB-MTP.gguf](https://huggingface.co/soyaakinohara/qwen3.8-27b-abliterated-3.69bpw-12GB-MTP.gguf) is recommended.
   - Other Qwen3.8 weights compatible with `llama-server` may also be used.
+
+For Dolphin Mistral 24B Venice Edition, this layout is supported directly:
+
+```text
+ComfyUI/models/LLM/Dolphin-Mistral-24B-Venice-Edition-heretic/
+├── Dolphin-Mistral-24B-Venice-Edition-heretic.Q4_K_M.gguf
+└── Dolphin-Mistral-24B-Venice-Edition-heretic.mmproj-Q8_0.gguf
+```
+
+Select the Dolphin model and its matching `mmproj` in the two node dropdowns, together with the `uncensored fidelity Dolphin` prompt profile.
 
 ## Use a preinstalled llama-server
 
