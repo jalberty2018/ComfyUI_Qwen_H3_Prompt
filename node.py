@@ -28,6 +28,7 @@ from .skills import (
     PROMPT_PROFILE_STANDARD,
     SKILL_NAMES,
     explicitly_requests_silence,
+    is_custom_skill,
     mode_router_prompt,
     multishot_output_issues,
     normalize_model_output,
@@ -232,7 +233,7 @@ class QwenH3Prompt(io.ComfyNode):
             node_id="QwenH3PromptLocal",
             display_name="Qwen H3 Prompt (Local)",
             category="😺dzNodes/Qwen_H3_Prompt",
-            description="Runs a local llama.cpp server with Qwen3.8, nine official MiniMax H3 Skills, and a seamless multishot writer.",
+            description="Runs a local llama.cpp server with Qwen3.8 and a discovered H3 Skill from the bundled or custom Skill directories.",
             inputs=[
                 io.String.Input(
                     "prompt",
@@ -244,7 +245,7 @@ class QwenH3Prompt(io.ComfyNode):
                     "skill",
                     options=["auto", *SKILL_NAMES],
                     default="auto",
-                    tooltip="Auto routes the request, or choose an official H3 Skill or the local seamless multishot writer directly.",
+                    tooltip="Auto routes across bundled and custom Skills, or choose one directly.",
                 ),
                 io.Float.Input(
                     "duration",
@@ -597,7 +598,7 @@ class QwenH3Prompt(io.ComfyNode):
                     time.perf_counter() - stage_started,
                 )
 
-                normalized_result = normalize_model_output(result)
+                normalized_result = (result if is_custom_skill(selected) else normalize_model_output(result))
                 if normalized_result != result:
                     LOGGER.info(
                         "[Qwen H3] Removed harmless surrounding whitespace or Markdown fence"
@@ -613,6 +614,9 @@ class QwenH3Prompt(io.ComfyNode):
                         "camera-continuity sentences word-for-word wherever they apply. Remove JSON, Markdown, "
                         "headings, field labels, questions, workflow text, and all text outside the shot blocks. "
                     )
+                elif is_custom_skill(selected):
+                    issues = ["The output is empty"] if not result.strip() else []
+                    repair_instruction = "Return the complete content requested by the selected Skill. "
                 else:
                     issues = output_issues(
                         result,
@@ -654,7 +658,7 @@ class QwenH3Prompt(io.ComfyNode):
                         _usage_summary(repair_usage),
                         time.perf_counter() - stage_started,
                     )
-                    normalized_result = normalize_model_output(result)
+                    normalized_result = (result if is_custom_skill(selected) else normalize_model_output(result))
                     if normalized_result != result:
                         LOGGER.info(
                             "[Qwen H3] Removed harmless surrounding whitespace or Markdown fence from repaired output"
@@ -662,6 +666,8 @@ class QwenH3Prompt(io.ComfyNode):
                     result = normalized_result
                     if is_multishot:
                         remaining = multishot_output_issues(result, shot_count)
+                    elif is_custom_skill(selected):
+                        remaining = ["The output is empty"] if not result.strip() else []
                     else:
                         remaining = output_issues(
                             result,

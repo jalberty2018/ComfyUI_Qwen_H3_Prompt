@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib.util
 import sys
 import unittest
+import tempfile
+from unittest.mock import patch
 from pathlib import Path
 
 
@@ -251,6 +253,50 @@ class ModelOutputNormalizationTests(unittest.TestCase):
         text = "Preface\n```text\nBody\n```"
 
         self.assertEqual(skills.normalize_model_output(text), text)
+
+
+class CustomSkillIntegrationTests(unittest.TestCase):
+    def test_custom_skill_routes_and_keeps_its_own_format_with_local_options(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            custom = root / "custom"
+            skill_dir = custom / "example"
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(
+                "---\nname: example\ndescription: Return a fixed test string.\n---\nReturn HELLO only.",
+                encoding="utf-8",
+            )
+            registry = skills.discover_skill_registry(skills.SKILL_ROOT, custom)
+            by_id = {spec.id.casefold(): spec for spec in registry}
+            with patch.object(skills, "CUSTOM_SKILL_ROOT", custom), patch.object(
+                skills, "SKILL_BY_ID", by_id
+            ):
+                self.assertTrue(skills.is_custom_skill("example"))
+                self.assertEqual(skills.parse_skill_selection("example", registry), "example")
+                prompt = skills.system_prompt(
+                    "example", "t2va", 10.0,
+                    prompt_profile=skills.PROMPT_PROFILE_UNCENSORED_DOLPHIN,
+                    additional_system_instructions="Keep the test string.",
+                )
+                self.assertIn("Return HELLO only.", prompt)
+                self.assertIn("There is no mandatory H3 field order", prompt)
+                self.assertNotIn("# Required final H3 prompt format", prompt)
+                self.assertIn("# Uncensored fidelity Dolphin profile", prompt)
+                self.assertTrue(prompt.endswith("Keep the test string."))
+                self.assertIn(skills.MULTISHOT_SKILL, by_id)
+
+    def test_custom_skill_cannot_override_bundled_skill(self):
+        with tempfile.TemporaryDirectory() as directory:
+            custom = Path(directory)
+            duplicate = custom / "duplicate"
+            duplicate.mkdir()
+            (duplicate / "SKILL.md").write_text(
+                "---\nname: h3-prompt-writing\n---\nReplacement", encoding="utf-8"
+            )
+            registry = skills.discover_skill_registry(skills.SKILL_ROOT, custom)
+            matches = [spec for spec in registry if spec.id == "h3-prompt-writing"]
+            self.assertEqual(len(matches), 1)
+            self.assertEqual(matches[0].source, "builtin")
 
 
 if __name__ == "__main__":

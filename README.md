@@ -58,7 +58,7 @@ The `comfyui-runtime2` and `run-comfyui-minimax` images configure this path auto
 
 ## Install the bundled llama-server runtime
 
-For installations that do not provide `MINIMAX_H3_LLAMA_SERVER`, the project has one cross-platform installer: `install_runtime.py`. It uses only the Python standard library, detects Windows, Linux, or macOS plus the CPU architecture and GPU, and installs a pinned llama.cpp `b10436` runtime. No additional pip packages are required.
+For installations that do not provide `MINIMAX_H3_LLAMA_SERVER`, the project has one cross-platform installer: `install_runtime.py`. It uses only the Python standard library, detects Windows, Linux, or macOS plus the CPU architecture and GPU, and installs a pinned llama.cpp `b11115` runtime. No additional pip packages are required.
 
 For the official portable ComfyUI package on Windows, run this from the node directory:
 
@@ -90,7 +90,7 @@ python install_runtime.py --backend vulkan
 # Reinstall the runtime
 python install_runtime.py --force
 
-# Use only previously verified files from runtime/.downloads/b10436
+# Use only previously verified files from runtime/.downloads/b11115
 python install_runtime.py --offline
 ```
 
@@ -105,19 +105,21 @@ python install_runtime.py --offline
 | Windows ARM64 NVIDIA | CUDA 13.4 preview → CPU |
 | Windows ARM64 Qualcomm Adreno | OpenCL → CPU |
 | Linux x64 Intel | SYCL FP16 → Vulkan → CPU |
-| Linux x64 NVIDIA, AMD, or unidentified GPU | Vulkan → CPU |
+| Linux x64 NVIDIA | Compatible CUDA archive → Vulkan → CPU |
+| Linux x64 AMD | ROCm → Vulkan → CPU |
+| Linux x64 unidentified GPU | Vulkan → CPU |
 | Linux ARM64 | Vulkan → CPU |
 | macOS Apple Silicon or Intel | Metal → CPU |
 
 Available Windows backends depend on the architecture and can include `cuda12`, `cuda13`, `rocm`, `sycl`, `vulkan`, `opencl`, and `cpu`.
 
-Official prebuilt Linux backends include `vulkan`, `sycl`, `sycl-fp32`, `openvino`, and `cpu`, depending on the architecture. The official files target Ubuntu; other distributions need compatible glibc and libstdc++ versions. Vulkan and Intel SYCL/OpenVINO also require the appropriate system GPU drivers and runtime libraries.
+Official prebuilt Linux backends include `cuda12`, `cuda13`, `rocm`, `vulkan`, `sycl`, `sycl-fp32`, `openvino`, and `cpu`, depending on the architecture. The official files target Ubuntu; other distributions need compatible glibc and libstdc++ versions. Vulkan and Intel SYCL/OpenVINO also require the appropriate system GPU drivers and runtime libraries.
 
 macOS uses the official package for the active architecture. Metal does not require an additional GPU compute framework, but a Qwen3.8-27B Q4 model and vision projector still require sufficient unified memory.
 
 ### Linux CUDA source installation
 
-The official `b10436` release does not provide a prebuilt Linux CUDA archive. NVIDIA Linux users can explicitly build it from source:
+The official `b11115` release provides Ubuntu x64 CUDA 12.8/13.4 and ARM64 CUDA 13.4 archives. Automatic selection uses driver compatibility reported by `nvidia-smi`, with `nvcc` as a fallback. Use `--backend cuda` to select a compatible archive, or explicitly build from source:
 
 ```bash
 python install_runtime.py --backend cuda --build-from-source
@@ -233,6 +235,14 @@ When using this node together with another local Qwen node, avoid keeping both s
 ## Upstream sources and licenses
 
 - The MiniMax H3 Skills come from [`MiniMax-AI/MiniMax-H3`](https://github.com/MiniMax-AI/MiniMax-H3) commit `d21241f0a4b3acbb34c97dae47fa417b7065e438`; the official files are stored under `skills/`.
-- The cross-platform runtime installer pins llama.cpp `b10436`, corresponding to full commit `6fed9f6ff7a603b124cb8c5864fca6ea879f9f99`, and verifies downloaded files with SHA-256.
+- The cross-platform runtime installer pins llama.cpp `b11115`, corresponding to full commit `d5f66492e661b63e6c74822c2b72f5146053994e`, and verifies downloaded files with SHA-256.
 - Linux CUDA source builds use the same pinned tag and commit. The llama.cpp MIT license is stored at `third_party/llama.cpp-LICENSE`.
 - This project is intended for study and research. Review the licenses of the respective upstream projects before commercial use.
+
+## Custom Skills
+
+At node startup, Skills are discovered in `skills/` and `custom_skills/`. Create a subdirectory with a `SKILL.md` in `custom_skills/`, then restart ComfyUI. IDs must use lowercase letters, digits, dots, underscores or hyphens, must not be `auto`, and must not duplicate a bundled Skill. Auto routing includes custom Skills. See [custom_skills/README.md](custom_skills/README.md) for metadata details.
+
+Custom Skills control their own output format; the existing bundled H3 format checks and seamless multishot contract are retained. Skills provide prompt guidance only: their scripts, tools and network calls are not executed. Dolphin profiles, manual mode selection and additional system instructions remain available.
+
+The runtime process uses the node directory as its working directory to avoid restrictive runtime-directory ACLs on Windows. If an old installation reports `WinError 5`, stop ComfyUI and rerun `python install_runtime.py --force` as the current user.
