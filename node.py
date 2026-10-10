@@ -345,7 +345,7 @@ class QwenH3Prompt(io.ComfyNode):
                     display_name="H3 model mode",
                     options=list(H3_MODE_OPTIONS),
                     default=H3_MODE_AUTO,
-                    tooltip="Auto keeps the existing media/prompt routing. T2VA, I2VA, and FL2VA use the base H3 prompt rules; REF2VA uses the reference prompt rules.",
+                    tooltip="Auto keeps the existing media/prompt routing. T2VA, I2VA, and FL2VA use the base H3 prompt rules; REF2VA uses the reference prompt rules with media; RefMod uses the same reference prompt rules without input media.",
                 ),
                 io.Autogrow.Input(
                     "reference_images",

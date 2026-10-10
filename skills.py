@@ -25,12 +25,14 @@ H3_MODE_T2VA = "T2VA"
 H3_MODE_I2VA = "I2VA"
 H3_MODE_FL2VA = "FL2VA"
 H3_MODE_REF2VA = "REF2VA"
+H3_MODE_REFMOD = "RefMod"
 H3_MODE_OPTIONS = (
     H3_MODE_AUTO,
     H3_MODE_T2VA,
     H3_MODE_I2VA,
     H3_MODE_FL2VA,
     H3_MODE_REF2VA,
+    H3_MODE_REFMOD,
 )
 
 CUSTOM_SKILL_ROOT = Path(__file__).with_name("custom_skills")
@@ -360,6 +362,10 @@ def resolve_h3_mode(mode_selection: str, image_count: int, video_count: int) -> 
             raise ValueError(
                 "Forced REF2VA requires at least one reference image or reference video"
             )
+        return "ref2va"
+    if normalized == H3_MODE_REFMOD.lower():
+        if image_count or video_count:
+            raise ValueError("RefMod requires no reference images or reference videos")
         return "ref2va"
     raise ValueError(
         f"Unknown H3 model mode: {mode_selection}. Choose one of: {', '.join(H3_MODE_OPTIONS)}"

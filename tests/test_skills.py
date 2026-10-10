@@ -155,6 +155,20 @@ class H3ModeSelectionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "at least one reference"):
             skills.resolve_h3_mode("REF2VA", 0, 0)
 
+    def test_refmod_uses_reference_prompt_guide_without_media(self):
+        self.assertIn("RefMod", skills.H3_MODE_OPTIONS)
+        mode = skills.resolve_h3_mode("RefMod", 0, 0)
+        self.assertEqual(mode, "ref2va")
+        prompt = skills.system_prompt("h3-prompt-writing", mode, 10.0)
+        self.assertIn("# Required reference: ref-en.txt", prompt)
+        self.assertNotIn("# Required reference: base-en.txt", prompt)
+
+    def test_refmod_rejects_reference_media(self):
+        for image_count, video_count in ((1, 0), (0, 1), (1, 1)):
+            with self.subTest(image_count=image_count, video_count=video_count):
+                with self.assertRaisesRegex(ValueError, "no reference images"):
+                    skills.resolve_h3_mode("RefMod", image_count, video_count)
+
     def test_unknown_mode_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "Unknown H3 model mode"):
             skills.resolve_h3_mode("L2VA", 1, 0)
