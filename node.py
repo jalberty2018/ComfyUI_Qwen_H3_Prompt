@@ -160,7 +160,17 @@ def _picture_role(mode: str, picture_index: int) -> str:
     return "a general visual reference whose role follows the user request"
 
 
-def _sampling_settings(think_mode: bool) -> dict[str, float | int]:
+def _sampling_settings(think_mode: bool, sampling_mode=None) -> dict[str, float | int]:
+    if sampling_mode is not None:
+        mode = sampling_mode.get("sampling_mode")
+        if mode == "off":
+            return dict(temperature=0.0, top_p=1.0, top_k=1, min_p=0.0,
+                        presence_penalty=0.0, repetition_penalty=1.0)
+        if mode != "on":
+            raise ValueError("sampling_mode must be on or off")
+        settings = _sampling_settings(think_mode)
+        settings.update({key: sampling_mode[key] for key in settings if key in sampling_mode})
+        return settings
     if think_mode:
         return {
             "temperature": 1.0,
@@ -279,7 +289,7 @@ class QwenH3Prompt(io.ComfyNode):
                     "think_mode",
                     display_name="think_mode",
                     default=False,
-                    tooltip="Off uses Qwen's official instruct settings. On enables thinking and uses Qwen's official thinking settings.",
+                    tooltip="Enable model thinking. Sampling is controlled separately by Sampling Mode.",
                 ),
                 io.Combo.Input(
                     "reasoning_effort",
@@ -347,6 +357,26 @@ class QwenH3Prompt(io.ComfyNode):
                     default=H3_MODE_AUTO,
                     tooltip="Auto keeps the existing media/prompt routing. T2VA, I2VA, and FL2VA use the base H3 prompt rules; REF2VA uses the reference prompt rules with media; RefMod uses the same reference prompt rules without input media.",
                 ),
+                io.DynamicCombo.Input(
+                    "sampling_mode",
+                    display_name="Sampling Mode",
+                    options=[
+                        io.DynamicCombo.Option(key="on", inputs=[
+                            io.Float.Input("temperature", default=0.7, min=0.0, max=2.0, step=0.01),
+                            io.Int.Input("top_k", default=20, min=0, max=1000),
+                            io.Float.Input("top_p", default=0.8, min=0.0, max=1.0, step=0.01),
+                            io.Float.Input("min_p", default=0.0, min=0.0, max=1.0, step=0.01),
+                            io.Float.Input("repetition_penalty", default=1.0, min=0.0, max=5.0, step=0.01),
+                            io.Float.Input("presence_penalty", default=1.5, min=-2.0, max=2.0, step=0.01),
+                        ]),
+                        io.DynamicCombo.Option(key="off", inputs=[]),
+                    ],
+                    tooltip="On uses the visible sampling settings. Off uses greedy decoding without penalties. Seed remains available above.",
+                ),
+                io.Combo.Input(
+                    "mtp", options=["auto", "on", "off"], default="auto",
+                    tooltip="llama.cpp MTP speculative decoding. Auto tries MTP and falls back if startup fails; on requires a compatible runtime and GGUF with MTP weights. Changing this restarts the local server.",
+                ),
                 io.Autogrow.Input(
                     "reference_images",
                     optional=True,
@@ -401,6 +431,8 @@ class QwenH3Prompt(io.ComfyNode):
         h3_model_mode=H3_MODE_AUTO,
         reference_images=None,
         reference_videos=None,
+        sampling_mode=None,
+        mtp="auto",
     ) -> io.NodeOutput:
         total_started = time.perf_counter()
         content = None
@@ -433,7 +465,7 @@ class QwenH3Prompt(io.ComfyNode):
             complete_silence = explicitly_requests_silence(prompt)
             model = _resolve_model(llm_model)
             projector = _resolve_model(vision_model)
-            settings = _sampling_settings(think_mode)
+            settings = _sampling_settings(think_mode, sampling_mode)
             LOGGER.info(
                 "[Qwen H3] Sampling configuration selected | mode=%s | temperature=%.2f | top_p=%.2f | top_k=%d | min_p=%.2f | presence_penalty=%.2f | repetition_penalty=%.2f",
                 "thinking" if think_mode else "instruct",
@@ -470,7 +502,7 @@ class QwenH3Prompt(io.ComfyNode):
                     model.name,
                     projector.name,
                 )
-                server, loaded_new = SERVER_MANAGER.acquire(model, projector)
+                server, loaded_new = SERVER_MANAGER.acquire(model, projector, mtp=mtp)
                 LOGGER.info(
                     "[Qwen H3] Model loading complete | %s | platform=%s | backend=%s | port=%d | elapsed %.2f s",
                     "new model loaded" if loaded_new else "resident model reused",

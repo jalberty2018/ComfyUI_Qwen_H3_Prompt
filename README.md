@@ -246,3 +246,15 @@ At node startup, Skills are discovered in `skills/` and `custom_skills/`. Create
 Custom Skills control their own output format; the existing bundled H3 format checks and seamless multishot contract are retained. Skills provide prompt guidance only: their scripts, tools and network calls are not executed. Dolphin profiles, manual mode selection and additional system instructions remain available.
 
 The runtime process uses the node directory as its working directory to avoid restrictive runtime-directory ACLs on Windows. If an old installation reports `WinError 5`, stop ComfyUI and rerun `python install_runtime.py --force` as the current user.
+
+
+### Sampling Mode and MTP (local llama.cpp)
+
+- **Sampling Mode on** exposes temperature, top_k, top_p, min_p, repetition_penalty and presence_penalty. Initial values match this node's instruct preset. Thinking is independent; for the previous thinking preset use temperature 1.0, top_p 0.95, top_k 20, min_p 0, presence_penalty 0 and repetition_penalty 1.
+- **Sampling Mode off** uses greedy decoding (temperature 0, top_k 1) with neutral penalties. Hidden sampling values are ignored. The existing seed widget remains in its original position.
+- **mtp auto** attempts `--spec-type draft-mtp`. If server startup fails, it logs the failure and retries without MTP. This is startup fallback, not ComfyUI's adaptive MTP algorithm.
+- **mtp on** requires a compatible llama.cpp build and GGUF containing MTP weights; startup failures are reported. **off** starts without MTP flags. Changing the selection reloads a resident server. Separate draft GGUFs and ComfyUI tree modes are not configured by this node.
+
+The generation and automatic repair calls share the chosen sampling settings; routing remains greedy. API calls omitting sampling_mode retain the old thinking/instruct presets. Restart ComfyUI and refresh the browser after updating. A new node instance exposes the new inputs; check settings when loading older workflows.
+
+Backend reference: https://github.com/ggml-org/llama.cpp/blob/master/docs/speculative.md
